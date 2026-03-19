@@ -39,8 +39,7 @@ export async function createWorkout(
   userId: string
 ): Promise<CreateWorkoutResult> {
   // Höchste Einheitennummer des Plans ermitteln
-  const { data: lastWorkout } = await supabase
-    .from('workouts')
+  const { data: lastWorkout } = await (supabase.from('workouts') as any)
     .select('workout_number')
     .eq('plan_id', planId)
     .eq('user_id', userId)
@@ -57,8 +56,7 @@ export async function createWorkout(
     started_at: new Date().toISOString(),
   };
 
-  const { data, error } = await supabase
-    .from('workouts')
+  const { data, error } = await (supabase.from('workouts') as any)
     .insert(insert)
     .select()
     .single();
@@ -126,8 +124,7 @@ export async function getWorkoutsByPlan(
  * Markiert ein Workout als abgeschlossen.
  */
 export async function completeWorkout(workoutId: string): Promise<boolean> {
-  const { error } = await supabase
-    .from('workouts')
+  const { error } = await (supabase.from('workouts') as any)
     .update({ completed_at: new Date().toISOString() })
     .eq('id', workoutId);
 
@@ -156,8 +153,7 @@ export async function logSet(data: LogSetData): Promise<WorkoutSet | null> {
     completed_at: new Date().toISOString(),
   };
 
-  const { data: result, error } = await supabase
-    .from('workout_sets')
+  const { data: result, error } = await (supabase.from('workout_sets') as any)
     .insert(insert)
     .select()
     .single();
@@ -177,8 +173,7 @@ export async function updateSet(
   setId: string,
   updates: { weight?: number; reps?: number; rpe?: number | null; notes?: string | null }
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('workout_sets')
+  const { error } = await (supabase.from('workout_sets') as any)
     .update(updates)
     .eq('id', setId);
 

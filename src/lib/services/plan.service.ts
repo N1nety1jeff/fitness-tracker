@@ -42,14 +42,17 @@ export async function getActivePlan(
     return null;
   }
 
+  // Cast nötig, da die manuellen Typen keine Relationen enthalten
+  const result = data as unknown as PlanWithExercises;
+
   // Übungen nach sort_order sortieren
-  if (data && data.plan_exercises) {
-    data.plan_exercises.sort(
+  if (result?.plan_exercises) {
+    result.plan_exercises.sort(
       (a: PlanExercise, b: PlanExercise) => a.sort_order - b.sort_order
     );
   }
 
-  return data as PlanWithExercises;
+  return result;
 }
 
 /**
@@ -69,13 +72,15 @@ export async function getPlanWithExercises(
     return null;
   }
 
-  if (data && data.plan_exercises) {
-    data.plan_exercises.sort(
+  const result = data as unknown as PlanWithExercises;
+
+  if (result?.plan_exercises) {
+    result.plan_exercises.sort(
       (a: PlanExercise, b: PlanExercise) => a.sort_order - b.sort_order
     );
   }
 
-  return data as PlanWithExercises;
+  return result;
 }
 
 /**
@@ -107,8 +112,7 @@ export async function createPlan(
   cycleLength?: number,
 ): Promise<Plan | null> {
   // Alle bestehenden Pläne deaktivieren
-  await supabase
-    .from('plans')
+  await (supabase.from('plans') as any)
     .update({ is_active: false })
     .eq('user_id', userId)
     .eq('is_active', true);
@@ -121,8 +125,7 @@ export async function createPlan(
     is_active: true,
   };
 
-  const { data, error } = await supabase
-    .from('plans')
+  const { data, error } = await (supabase.from('plans') as any)
     .insert(insert)
     .select()
     .single();
@@ -142,8 +145,7 @@ export async function updatePlan(
   planId: string,
   updates: { name?: string; description?: string | null; cycle_length?: number; is_active?: boolean }
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('plans')
+  const { error } = await (supabase.from('plans') as any)
     .update(updates)
     .eq('id', planId);
 
@@ -207,8 +209,7 @@ export async function updateExercise(
   exerciseId: string,
   updates: Partial<Omit<PlanExercise, 'id' | 'plan_id' | 'created_at' | 'updated_at'>>
 ): Promise<boolean> {
-  const { error } = await supabase
-    .from('plan_exercises')
+  const { error } = await (supabase.from('plan_exercises') as any)
     .update(updates)
     .eq('id', exerciseId);
 

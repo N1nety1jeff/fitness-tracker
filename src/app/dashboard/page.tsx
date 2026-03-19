@@ -236,16 +236,16 @@ export default function DashboardPage() {
         <div className="glass-card flex justify-around p-4 border-white/10 shadow-2xl">
           <button className="flex flex-col items-center gap-1 text-primary">
             <TrendingUp className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Progress</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
           </button>
-          <Link href="/workout" className="flex flex-col items-center gap-1 text-muted-foreground">
+          <Link href="/plans" className="flex flex-col items-center gap-1 text-muted-foreground">
             <Plus className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Training</span>
-          </Link>
-          <button className="flex flex-col items-center gap-1 text-muted-foreground">
-            <RotateCcw className="w-6 h-6" />
             <span className="text-[10px] font-black uppercase tracking-widest">Pläne</span>
-          </button>
+          </Link>
+          <Link href="/settings" className="flex flex-col items-center gap-1 text-muted-foreground">
+            <RotateCcw className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Daten</span>
+          </Link>
         </div>
       </nav>
     </div>

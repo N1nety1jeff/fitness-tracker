@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,12 +12,26 @@ import {
   History,
   Plus,
   Minus,
-  MessageSquare
+  MessageSquare,
+  List,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTimer } from '@/hooks/use-timer';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { logSet, completeWorkout } from '@/lib/services/workout.service';
+
+function formatDuration(startIso: string): string {
+  const diff = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
 
 export default function WorkoutPage() {
   const router = useRouter();
@@ -26,6 +40,7 @@ export default function WorkoutPage() {
     currentExerciseIndex,
     nextExercise,
     previousExercise,
+    setCurrentExercise,
     addSet,
     isActive,
     activeWorkout,
@@ -38,12 +53,25 @@ export default function WorkoutPage() {
   const [reps, setReps] = useState(8);
   const [notes, setNotes] = useState('');
   const [isCompleting, setIsCompleting] = useState(false);
+  const [duration, setDuration] = useState('00:00');
+  const [showOverview, setShowOverview] = useState(false);
+  const overviewRef = useRef<HTMLDivElement>(null);
 
   const timer = useTimer({
     restDuration: currentExercise?.rest_seconds ?? 90,
   });
 
-  // Eingabewerte aktualisieren + Timer zurücksetzen wenn Übung wechselt
+  // Laufende Uhr
+  useEffect(() => {
+    if (!activeWorkout?.started_at) return;
+    setDuration(formatDuration(activeWorkout.started_at));
+    const interval = setInterval(() => {
+      setDuration(formatDuration(activeWorkout.started_at));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeWorkout?.started_at]);
+
+  // Eingabewerte + Timer zurücksetzen bei Übungswechsel
   useEffect(() => {
     if (currentExercise) {
       setWeight(currentExercise.target_weight);
@@ -53,6 +81,18 @@ export default function WorkoutPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentExerciseIndex]);
+
+  // Übersicht schließen wenn außerhalb geklickt
+  useEffect(() => {
+    if (!showOverview) return;
+    const handler = (e: MouseEvent) => {
+      if (overviewRef.current && !overviewRef.current.contains(e.target as Node)) {
+        setShowOverview(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showOverview]);
 
   const handleLogSet = async () => {
     if (!activeWorkout || !currentExercise) return;
@@ -82,7 +122,6 @@ export default function WorkoutPage() {
           rpe: null,
           notes: notes || null,
         });
-
         timer.reset();
         timer.start();
         setNotes('');
@@ -116,31 +155,74 @@ export default function WorkoutPage() {
   }
 
   const currentSetNumber = currentExercise.completedSets.length + 1;
-  const setsRemaining = currentExercise.target_sets - currentExercise.completedSets.length;
-  const allSetsDone = setsRemaining <= 0;
+  const allSetsDone = currentExercise.completedSets.length >= currentExercise.target_sets;
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 pb-24 font-sans max-w-md mx-auto">
+    <div className="min-h-screen bg-black text-white p-4 pb-28 font-sans max-w-md mx-auto">
       {/* Header */}
-      <header className="flex items-center justify-between mb-8 pt-4">
+      <header className="flex items-center justify-between mb-4 pt-4">
         <button onClick={() => router.push('/dashboard')} className="p-2 hover:bg-muted rounded-full">
           <ChevronLeft className="w-6 h-6" />
         </button>
         <div className="text-center">
-          <h1 className="text-xs font-bold uppercase tracking-widest text-muted-foreground underline decoration-primary/50 underline-offset-4">
-            Einheit {activeWorkout.workout_number}
-          </h1>
-          <p className="text-lg font-black italic uppercase tracking-tight">Training</p>
+          <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            {activeWorkout.started_at && (
+              <span>Start {formatTime(activeWorkout.started_at)} · </span>
+            )}
+            <span className="text-primary font-mono">{duration}</span>
+          </div>
+          <p className="text-base font-black italic uppercase tracking-tight">Einheit {activeWorkout.workout_number}</p>
         </div>
-        <button
-          onClick={handleCompleteWorkout}
-          disabled={isCompleting}
-          className="p-2 hover:bg-muted rounded-full text-primary disabled:opacity-50"
-          title="Training abschließen"
-        >
-          <CheckCircle2 className="w-6 h-6" />
-        </button>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setShowOverview(v => !v)}
+            className="p-2 hover:bg-muted rounded-full text-muted-foreground"
+            title="Übungsübersicht"
+          >
+            <List className="w-6 h-6" />
+          </button>
+          <button
+            onClick={handleCompleteWorkout}
+            disabled={isCompleting}
+            className="p-2 hover:bg-muted rounded-full text-primary disabled:opacity-50"
+            title="Training abschließen"
+          >
+            <CheckCircle2 className="w-6 h-6" />
+          </button>
+        </div>
       </header>
+
+      {/* Übungsübersicht (Dropdown) */}
+      {showOverview && (
+        <div ref={overviewRef} className="glass-card border-white/10 mb-4 overflow-hidden">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-4 pt-3 pb-2">
+            Alle Übungen – tippe zum Springen
+          </p>
+          <ul>
+            {exercises.map((ex, i) => {
+              const done = ex.completedSets.length;
+              const total = ex.target_sets;
+              const isCurrentEx = i === currentExerciseIndex;
+              return (
+                <li key={ex.id}>
+                  <button
+                    onClick={() => { setCurrentExercise(i); setShowOverview(false); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                      isCurrentEx ? 'bg-primary/10' : 'hover:bg-white/5'
+                    }`}
+                  >
+                    <span className={`text-xs font-mono w-4 ${isCurrentEx ? 'text-primary' : 'text-muted-foreground'}`}>{i + 1}</span>
+                    <span className="flex-1 text-sm font-bold truncate">{ex.name}</span>
+                    <span className={`text-xs font-mono shrink-0 ${done >= total ? 'text-primary' : 'text-muted-foreground'}`}>
+                      {done}/{total}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Exercise Navigation */}
       <section className="mb-6">
@@ -151,11 +233,9 @@ export default function WorkoutPage() {
           >
             <ChevronLeft className="w-5 h-5 text-white" />
           </button>
-
           <h2 className="text-2xl font-black italic uppercase tracking-tight leading-tight text-center flex-1 px-4">
             {currentExercise.name}
           </h2>
-
           <button
             onClick={nextExercise}
             className={`p-3 glass-card border-white/5 hover:bg-white/10 transition-colors ${currentExerciseIndex === exercises.length - 1 ? 'opacity-20 pointer-events-none' : ''}`}
@@ -163,10 +243,9 @@ export default function WorkoutPage() {
             <ChevronRight className="w-5 h-5 text-white" />
           </button>
         </div>
-
         <div className="flex justify-center gap-4 text-sm">
           <span className="bg-primary/10 text-primary px-4 py-1.5 rounded-full font-bold border border-primary/20 text-xs tracking-wide">
-            Ziel: {currentExercise.target_sets}x{currentExercise.target_reps} @ {currentExercise.target_weight}kg
+            Ziel: {currentExercise.target_sets}×{currentExercise.target_reps} @ {currentExercise.target_weight}kg
           </span>
         </div>
       </section>
@@ -180,7 +259,7 @@ export default function WorkoutPage() {
           {currentExercise.previousSets.map((set, i) => (
             <div key={i} className="text-center">
               <p className="text-[10px] text-muted-foreground mb-1">Satz {i + 1}</p>
-              <p className="font-mono text-sm">{set.weight}kg x {set.reps}</p>
+              <p className="font-mono text-sm">{set.weight}kg × {set.reps}</p>
             </div>
           ))}
           {currentExercise.previousSets.length === 0 && (
@@ -199,9 +278,6 @@ export default function WorkoutPage() {
               {allSetsDone ? '✓' : currentSetNumber}
               {!allSetsDone && <span className="text-xl text-muted-foreground"> / {currentExercise.target_sets}</span>}
             </div>
-            {allSetsDone && (
-              <div className="text-[10px] text-primary font-bold uppercase tracking-widest mt-1">Fertig</div>
-            )}
           </div>
           <div className="h-16 w-px bg-white/10" />
           <div className="text-center cursor-pointer group" onClick={timer.isRunning ? timer.pause : timer.resume}>
@@ -273,17 +349,21 @@ export default function WorkoutPage() {
       {/* Navigation Footer */}
       <nav className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent pt-10">
         <div className="glass-card flex justify-around p-4 border-white/10 shadow-2xl">
-          <button className="flex flex-col items-center gap-1 text-primary">
+          <button onClick={() => router.push('/dashboard')} className="flex flex-col items-center gap-1 text-muted-foreground">
             <History className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
+          </button>
+          <button className="flex flex-col items-center gap-1 text-primary">
+            <Play className="w-6 h-6 fill-current" />
             <span className="text-[10px] font-black uppercase tracking-widest">Training</span>
           </button>
-          <button className="flex flex-col items-center gap-1 text-muted-foreground">
-            <Clock className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">History</span>
+          <button onClick={() => router.push('/plans')} className="flex flex-col items-center gap-1 text-muted-foreground">
+            <List className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Pläne</span>
           </button>
-          <button className="flex flex-col items-center gap-1 text-muted-foreground">
-            <Plus className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Plan</span>
+          <button onClick={() => router.push('/settings')} className="flex flex-col items-center gap-1 text-muted-foreground">
+            <Clock className="w-6 h-6" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Daten</span>
           </button>
         </div>
       </nav>

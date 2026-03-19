@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Star, Plus, Pencil, Trash2, X, Check, ChevronLeft } from 'lucide-react';
+import { Search, Star, Plus, Pencil, Trash2, X, Check, ChevronLeft, Info, ChevronDown, ChevronUp, Timer, Hash } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   getExercises,
@@ -11,6 +11,7 @@ import {
   deleteExercise,
 } from '@/lib/services/exercise.service';
 import type { Exercise } from '@/lib/supabase/types';
+import BottomNav from '@/components/bottom-nav';
 
 const USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -23,6 +24,10 @@ interface EditState {
   equipment_id: string;
   muscle_group: string;
   notes: string;
+  exercise_type: 'reps' | 'time';
+  target_muscles: string;
+  instructions: string;
+  common_mistakes: string;
 }
 
 export default function ExercisesPage() {
@@ -33,10 +38,17 @@ export default function ExercisesPage() {
   const [filterGroup, setFilterGroup] = useState('Alle');
   const [sortMode, setSortMode] = useState<SortMode>('favoriten');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editState, setEditState] = useState<EditState>({ name: '', equipment_id: '', muscle_group: '', notes: '' });
+  const [editState, setEditState] = useState<EditState>({ name: '', equipment_id: '', muscle_group: '', notes: '', exercise_type: 'reps', target_muscles: '', instructions: '', common_mistakes: '' });
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newExercise, setNewExercise] = useState<EditState>({ name: '', equipment_id: '', muscle_group: '', notes: '' });
+  const [newExercise, setNewExercise] = useState<EditState>({ name: '', equipment_id: '', muscle_group: '', notes: '', exercise_type: 'reps', target_muscles: '', instructions: '', common_mistakes: '' });
   const [isSaving, setIsSaving] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showDescriptions, setShowDescriptions] = useState(true);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('showDescriptions');
+    if (stored !== null) setShowDescriptions(stored === 'true');
+  }, []);
 
   const load = async () => {
     setIsLoading(true);
@@ -81,7 +93,16 @@ export default function ExercisesPage() {
 
   const handleStartEdit = (ex: Exercise) => {
     setEditingId(ex.id);
-    setEditState({ name: ex.name, equipment_id: ex.equipment_id || '', muscle_group: ex.muscle_group || '', notes: ex.notes || '' });
+    setEditState({
+      name: ex.name,
+      equipment_id: ex.equipment_id || '',
+      muscle_group: ex.muscle_group || '',
+      notes: ex.notes || '',
+      exercise_type: ex.exercise_type || 'reps',
+      target_muscles: ex.target_muscles || '',
+      instructions: ex.instructions || '',
+      common_mistakes: ex.common_mistakes || '',
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -92,6 +113,10 @@ export default function ExercisesPage() {
       equipment_id: editState.equipment_id.trim() || null,
       muscle_group: editState.muscle_group.trim() || null,
       notes: editState.notes.trim() || null,
+      exercise_type: editState.exercise_type,
+      target_muscles: editState.target_muscles.trim() || null,
+      instructions: editState.instructions.trim() || null,
+      common_mistakes: editState.common_mistakes.trim() || null,
     });
     setEditingId(null);
     setIsSaving(false);
@@ -112,8 +137,12 @@ export default function ExercisesPage() {
       equipment_id: newExercise.equipment_id.trim() || undefined,
       muscle_group: newExercise.muscle_group.trim() || undefined,
       notes: newExercise.notes.trim() || undefined,
+      exercise_type: newExercise.exercise_type,
+      target_muscles: newExercise.target_muscles.trim() || undefined,
+      instructions: newExercise.instructions.trim() || undefined,
+      common_mistakes: newExercise.common_mistakes.trim() || undefined,
     });
-    setNewExercise({ name: '', equipment_id: '', muscle_group: '', notes: '' });
+    setNewExercise({ name: '', equipment_id: '', muscle_group: '', notes: '', exercise_type: 'reps', target_muscles: '', instructions: '', common_mistakes: '' });
     setShowAddForm(false);
     setIsSaving(false);
     load();
@@ -198,6 +227,21 @@ export default function ExercisesPage() {
               placeholder="Name *"
               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
             />
+            {/* Typ-Auswahl */}
+            <div className="flex gap-2">
+              {(['reps', 'time'] as const).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setNewExercise(s => ({ ...s, exercise_type: t }))}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-1.5 transition-colors ${
+                    newExercise.exercise_type === t ? 'bg-primary text-black' : 'bg-white/5 text-muted-foreground'
+                  }`}
+                >
+                  {t === 'reps' ? <><Hash className="w-3 h-3" /> Reps</> : <><Timer className="w-3 h-3" /> Zeit</>}
+                </button>
+              ))}
+            </div>
             <input
               type="text"
               value={newExercise.equipment_id}
@@ -213,6 +257,25 @@ export default function ExercisesPage() {
               <option value="">Muskelgruppe (optional)</option>
               {MUSCLE_GROUPS.slice(1).map(g => <option key={g} value={g}>{g}</option>)}
             </select>
+            <input
+              type="text"
+              value={newExercise.target_muscles}
+              onChange={e => setNewExercise(s => ({ ...s, target_muscles: e.target.value }))}
+              placeholder="Zielmuskeln (optional)"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
+            />
+            <textarea
+              value={newExercise.instructions}
+              onChange={e => setNewExercise(s => ({ ...s, instructions: e.target.value }))}
+              placeholder="Ausführung (optional)"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 resize-none h-16"
+            />
+            <textarea
+              value={newExercise.common_mistakes}
+              onChange={e => setNewExercise(s => ({ ...s, common_mistakes: e.target.value }))}
+              placeholder="Häufige Fehler (optional)"
+              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 resize-none h-16"
+            />
             <textarea
               value={newExercise.notes}
               onChange={e => setNewExercise(s => ({ ...s, notes: e.target.value }))}
@@ -257,6 +320,21 @@ export default function ExercisesPage() {
                     onChange={e => setEditState(s => ({ ...s, name: e.target.value }))}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
                   />
+                  {/* Typ-Auswahl */}
+                  <div className="flex gap-2">
+                    {(['reps', 'time'] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setEditState(s => ({ ...s, exercise_type: t }))}
+                        className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-1.5 transition-colors ${
+                          editState.exercise_type === t ? 'bg-primary text-black' : 'bg-white/5 text-muted-foreground'
+                        }`}
+                      >
+                        {t === 'reps' ? <><Hash className="w-3 h-3" /> Reps</> : <><Timer className="w-3 h-3" /> Zeit</>}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     type="text"
                     value={editState.equipment_id}
@@ -272,6 +350,25 @@ export default function ExercisesPage() {
                     <option value="">Muskelgruppe</option>
                     {MUSCLE_GROUPS.slice(1).map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
+                  <input
+                    type="text"
+                    value={editState.target_muscles}
+                    onChange={e => setEditState(s => ({ ...s, target_muscles: e.target.value }))}
+                    placeholder="Zielmuskeln"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
+                  />
+                  <textarea
+                    value={editState.instructions}
+                    onChange={e => setEditState(s => ({ ...s, instructions: e.target.value }))}
+                    placeholder="Ausführung"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 resize-none h-14"
+                  />
+                  <textarea
+                    value={editState.common_mistakes}
+                    onChange={e => setEditState(s => ({ ...s, common_mistakes: e.target.value }))}
+                    placeholder="Häufige Fehler"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50 resize-none h-14"
+                  />
                   <textarea
                     value={editState.notes}
                     onChange={e => setEditState(s => ({ ...s, notes: e.target.value }))}
@@ -289,36 +386,73 @@ export default function ExercisesPage() {
                 </div>
               ) : (
                 /* View-Mode */
-                <div className="flex items-center gap-3 p-4">
-                  <button onClick={() => handleToggleFavorite(ex)} className="shrink-0">
-                    <Star className={`w-5 h-5 transition-colors ${ex.is_favorite ? 'fill-primary text-primary' : 'text-white/20'}`} />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate">{ex.name}</p>
-                    <div className="flex gap-2 mt-0.5">
-                      {ex.muscle_group && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-primary/70">{ex.muscle_group}</span>
+                <div>
+                  <div className="flex items-center gap-3 p-4">
+                    <button onClick={() => handleToggleFavorite(ex)} className="shrink-0">
+                      <Star className={`w-5 h-5 transition-colors ${ex.is_favorite ? 'fill-primary text-primary' : 'text-white/20'}`} />
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-sm truncate">{ex.name}</p>
+                        {ex.exercise_type === 'time' && (
+                          <span className="text-[9px] font-bold uppercase tracking-widest bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded shrink-0">Zeit</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2 mt-0.5">
+                        {ex.muscle_group && (
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-primary/70">{ex.muscle_group}</span>
+                        )}
+                        {ex.equipment_id && (
+                          <span className="text-[10px] font-mono text-muted-foreground">#{ex.equipment_id}</span>
+                        )}
+                      </div>
+                      {ex.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{ex.notes}</p>}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      {showDescriptions && (ex.target_muscles || ex.instructions || ex.common_mistakes) && (
+                        <button onClick={() => setExpandedId(expandedId === ex.id ? null : ex.id)} className="p-2 hover:bg-white/10 rounded-lg">
+                          <Info className={`w-4 h-4 ${expandedId === ex.id ? 'text-primary' : 'text-muted-foreground'}`} />
+                        </button>
                       )}
-                      {ex.equipment_id && (
-                        <span className="text-[10px] font-mono text-muted-foreground">#{ex.equipment_id}</span>
+                      <button onClick={() => handleStartEdit(ex)} className="p-2 hover:bg-white/10 rounded-lg">
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button onClick={() => handleDelete(ex.id)} className="p-2 hover:bg-white/10 rounded-lg">
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                      </button>
+                    </div>
+                  </div>
+                  {/* Expandierbarer Info-Bereich */}
+                  {expandedId === ex.id && showDescriptions && (
+                    <div className="px-4 pb-4 pt-0 space-y-2 border-t border-white/5 mt-0 pt-3">
+                      {ex.target_muscles && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-0.5">Zielmuskeln</p>
+                          <p className="text-xs text-muted-foreground">{ex.target_muscles}</p>
+                        </div>
+                      )}
+                      {ex.instructions && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-primary/70 mb-0.5">Ausführung</p>
+                          <p className="text-xs text-muted-foreground whitespace-pre-line">{ex.instructions}</p>
+                        </div>
+                      )}
+                      {ex.common_mistakes && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-red-400/70 mb-0.5">Häufige Fehler</p>
+                          <p className="text-xs text-muted-foreground whitespace-pre-line">{ex.common_mistakes}</p>
+                        </div>
                       )}
                     </div>
-                    {ex.notes && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{ex.notes}</p>}
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => handleStartEdit(ex)} className="p-2 hover:bg-white/10 rounded-lg">
-                      <Pencil className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                    <button onClick={() => handleDelete(ex.id)} className="p-2 hover:bg-white/10 rounded-lg">
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </button>
-                  </div>
+                  )}
                 </div>
               )}
             </li>
           ))}
         </ul>
       )}
+
+      <BottomNav />
     </div>
   );
 }

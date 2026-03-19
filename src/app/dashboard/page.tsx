@@ -1,19 +1,19 @@
 'use client';
 
 import React from 'react';
-import { 
-  TrendingUp, 
-  Calendar, 
-  Target, 
+import {
+  TrendingUp,
+  Calendar,
+  Target,
   Award,
   ChevronRight,
   Play,
   RotateCcw,
-  Plus
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getActivePlan, createPlan, addExerciseToPlan } from '@/lib/services/plan.service';
+import BottomNav from '@/components/bottom-nav';
 import { createWorkout } from '@/lib/services/workout.service';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { PlanWithExercises } from '@/lib/services/plan.service';
@@ -231,23 +231,7 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* Navigation Footer */}
-      <nav className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent pt-10">
-        <div className="glass-card flex justify-around p-4 border-white/10 shadow-2xl">
-          <button className="flex flex-col items-center gap-1 text-primary">
-            <TrendingUp className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
-          </button>
-          <Link href="/plans" className="flex flex-col items-center gap-1 text-muted-foreground">
-            <Plus className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Pläne</span>
-          </Link>
-          <Link href="/settings" className="flex flex-col items-center gap-1 text-muted-foreground">
-            <RotateCcw className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Daten</span>
-          </Link>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

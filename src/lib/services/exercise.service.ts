@@ -19,7 +19,7 @@ export async function getExercises(userId: string): Promise<Exercise[]> {
 
 export async function createExercise(
   userId: string,
-  data: { name: string; equipment_id?: string; muscle_group?: string; notes?: string }
+  data: { name: string; equipment_id?: string; muscle_group?: string; notes?: string; exercise_type?: 'reps' | 'time'; target_muscles?: string; instructions?: string; common_mistakes?: string }
 ): Promise<Exercise | null> {
   const insert: ExerciseInsert = {
     user_id: userId,
@@ -27,6 +27,10 @@ export async function createExercise(
     equipment_id: data.equipment_id || null,
     muscle_group: data.muscle_group || null,
     notes: data.notes || null,
+    exercise_type: data.exercise_type || 'reps',
+    target_muscles: data.target_muscles || null,
+    instructions: data.instructions || null,
+    common_mistakes: data.common_mistakes || null,
   };
 
   const { data: result, error } = await supabase
@@ -44,7 +48,7 @@ export async function createExercise(
 
 export async function updateExercise(
   id: string,
-  updates: { name?: string; equipment_id?: string | null; muscle_group?: string | null; notes?: string | null; is_favorite?: boolean }
+  updates: { name?: string; equipment_id?: string | null; muscle_group?: string | null; notes?: string | null; is_favorite?: boolean; exercise_type?: 'reps' | 'time'; target_muscles?: string | null; instructions?: string | null; common_mistakes?: string | null }
 ): Promise<boolean> {
   const { error } = await supabase
     .from('exercises')

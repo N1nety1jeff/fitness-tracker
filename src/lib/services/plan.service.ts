@@ -237,3 +237,21 @@ export async function deleteExercise(exerciseId: string): Promise<boolean> {
 
   return true;
 }
+
+/**
+ * Aktualisiert die sort_order aller Übungen in einem Plan.
+ */
+export async function reorderExercises(
+  exercises: { id: string; sort_order: number; superset_group: number | null }[]
+): Promise<boolean> {
+  for (const ex of exercises) {
+    const { error } = await (supabase.from('plan_exercises') as any)
+      .update({ sort_order: ex.sort_order, superset_group: ex.superset_group })
+      .eq('id', ex.id);
+    if (error) {
+      console.error('Fehler beim Sortieren:', error);
+      return false;
+    }
+  }
+  return true;
+}

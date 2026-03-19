@@ -2,15 +2,16 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Plus, ChevronLeft, ChevronRight, Trash2, Check,
-  BookOpen, Search, X, Star
+  Plus, ChevronLeft, ChevronRight, Trash2,
+  BookOpen, Search, X, Star, ArrowUp, ArrowDown, Link2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { getAllPlans, createPlan, updatePlan, deletePlan, addExerciseToPlan, getPlanWithExercises } from '@/lib/services/plan.service';
+import { getAllPlans, createPlan, updatePlan, deletePlan, addExerciseToPlan, getPlanWithExercises, reorderExercises } from '@/lib/services/plan.service';
 import { getExercises } from '@/lib/services/exercise.service';
 import { deleteExercise as deletePlanExercise } from '@/lib/services/plan.service';
 import type { Plan, PlanExercise, Exercise } from '@/lib/supabase/types';
 import type { PlanWithExercises } from '@/lib/services/plan.service';
+import BottomNav from '@/components/bottom-nav';
 
 const USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -37,6 +38,7 @@ export default function PlansPage() {
   const [exReps, setExReps] = useState(8);
   const [exWeight, setExWeight] = useState(0);
   const [exRest, setExRest] = useState(90);
+  const [exDuration, setExDuration] = useState(60);
 
   const loadPlans = async () => {
     setIsLoading(true);
@@ -94,21 +96,23 @@ export default function PlansPage() {
   const handleAddExercise = async () => {
     if (!selectedPlan || !pickedExercise) return;
     setIsSaving(true);
+    const isTimeBased = pickedExercise.exercise_type === 'time';
     const sortOrder = selectedPlan.plan_exercises.length + 1;
     await addExerciseToPlan(selectedPlan.id, {
       exercise_id: pickedExercise.id,
       name: pickedExercise.name,
       target_sets: exSets,
-      target_reps: exReps,
+      target_reps: isTimeBased ? 0 : exReps,
       target_weight: exWeight,
       rest_seconds: exRest,
+      target_duration_seconds: isTimeBased ? exDuration : null,
       progression_increment: 2.5,
       progression_threshold: 10,
       sort_order: sortOrder,
     });
     setPickedExercise(null);
     setExSearch('');
-    setExSets(3); setExReps(8); setExWeight(0); setExRest(90);
+    setExSets(3); setExReps(8); setExWeight(0); setExRest(90); setExDuration(60);
     setIsSaving(false);
     const detail = await getPlanWithExercises(selectedPlan.id);
     setSelectedPlan(detail);
@@ -122,6 +126,44 @@ export default function PlansPage() {
       const detail = await getPlanWithExercises(selectedPlan.id);
       setSelectedPlan(detail);
     }
+  };
+
+  const handleMoveExercise = async (index: number, direction: 'up' | 'down') => {
+    if (!selectedPlan) return;
+    const exs = [...selectedPlan.plan_exercises];
+    const swapIdx = direction === 'up' ? index - 1 : index + 1;
+    if (swapIdx < 0 || swapIdx >= exs.length) return;
+    [exs[index], exs[swapIdx]] = [exs[swapIdx], exs[index]];
+    const updates = exs.map((ex, i) => ({ id: ex.id, sort_order: i + 1, superset_group: ex.superset_group }));
+    await reorderExercises(updates);
+    const detail = await getPlanWithExercises(selectedPlan.id);
+    setSelectedPlan(detail);
+  };
+
+  const handleToggleSuperset = async (index: number) => {
+    if (!selectedPlan) return;
+    const exs = [...selectedPlan.plan_exercises];
+    if (index >= exs.length - 1) return;
+    const current = exs[index];
+    const next = exs[index + 1];
+
+    if (current.superset_group && current.superset_group === next.superset_group) {
+      // Remove superset - set both to null
+      current.superset_group = null;
+      next.superset_group = null;
+      // Check if any others in the group remain
+    } else {
+      // Create superset - find next available group number
+      const maxGroup = Math.max(0, ...exs.map(e => e.superset_group || 0));
+      const groupNum = current.superset_group || (maxGroup + 1);
+      current.superset_group = groupNum;
+      next.superset_group = groupNum;
+    }
+
+    const updates = exs.map((ex, i) => ({ id: ex.id, sort_order: i + 1, superset_group: ex.superset_group }));
+    await reorderExercises(updates);
+    const detail = await getPlanWithExercises(selectedPlan.id);
+    setSelectedPlan(detail);
   };
 
   const filteredExercises = useMemo(() => {
@@ -223,7 +265,10 @@ export default function PlansPage() {
                 >
                   {ex.is_favorite && <Star className="w-4 h-4 fill-primary text-primary shrink-0" />}
                   <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{ex.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-sm">{ex.name}</p>
+                      {ex.exercise_type === 'time' && <span className="text-[9px] font-bold uppercase bg-blue-500/20 text-blue-400 px-1 py-0.5 rounded">Zeit</span>}
+                    </div>
                     <div className="flex gap-2">
                       {ex.muscle_group && <span className="text-[10px] text-primary/70 font-bold uppercase">{ex.muscle_group}</span>}
                       {ex.equipment_id && <span className="text-[10px] font-mono text-muted-foreground">#{ex.equipment_id}</span>}
@@ -243,12 +288,17 @@ export default function PlansPage() {
               <button onClick={() => setPickedExercise(null)} className="text-xs text-muted-foreground mt-1 underline">Andere wählen</button>
             </div>
 
-            {[
+            {(pickedExercise.exercise_type === 'time' ? [
+              { label: 'Sätze', value: exSets, set: setExSets, step: 1, min: 1 },
+              { label: 'Dauer (Sek)', value: exDuration, set: setExDuration, step: 5, min: 5 },
+              { label: 'Gewicht (kg)', value: exWeight, set: setExWeight, step: 2.5, min: 0 },
+              { label: 'Pause (Sek)', value: exRest, set: setExRest, step: 15, min: 0 },
+            ] : [
               { label: 'Sätze', value: exSets, set: setExSets, step: 1, min: 1 },
               { label: 'Wiederholungen', value: exReps, set: setExReps, step: 1, min: 1 },
               { label: 'Startgewicht (kg)', value: exWeight, set: setExWeight, step: 2.5, min: 0 },
               { label: 'Pause (Sek)', value: exRest, set: setExRest, step: 15, min: 0 },
-            ].map(({ label, value, set, step, min }) => (
+            ]).map(({ label, value, set, step, min }) => (
               <div key={label} className="glass-card p-4 flex items-center justify-between border-white/5">
                 <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</span>
                 <div className="flex items-center gap-3">
@@ -322,21 +372,71 @@ export default function PlansPage() {
               </button>
             </div>
           ) : (
-            <ul className="space-y-2">
-              {selectedPlan.plan_exercises.map((ex, i) => (
-                <li key={ex.id} className="glass-card p-4 border-white/5 flex items-start gap-3">
-                  <span className="text-muted-foreground text-xs font-mono mt-0.5 w-4 shrink-0">{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm">{ex.name}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      {ex.target_sets}×{ex.target_reps} @ {ex.target_weight}kg · Pause {ex.rest_seconds}s
-                    </p>
-                  </div>
-                  <button onClick={() => handleRemoveExercise(ex.id)} className="p-1.5 hover:bg-white/10 rounded-lg shrink-0">
-                    <X className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                </li>
-              ))}
+            <ul className="space-y-1">
+              {selectedPlan.plan_exercises.map((ex, i) => {
+                const nextEx = selectedPlan.plan_exercises[i + 1];
+                const prevEx = i > 0 ? selectedPlan.plan_exercises[i - 1] : null;
+                const isInSuperset = ex.superset_group !== null;
+                const isFirstInSuperset = isInSuperset && (!prevEx || prevEx.superset_group !== ex.superset_group);
+                const isLastInSuperset = isInSuperset && (!nextEx || nextEx.superset_group !== ex.superset_group);
+                const supersetWithNext = ex.superset_group !== null && nextEx?.superset_group === ex.superset_group;
+
+                return (
+                  <li key={ex.id} className="relative">
+                    {/* Supersatz-Klammer */}
+                    {isInSuperset && (
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 bg-primary/50 ${isFirstInSuperset ? 'rounded-t-full mt-2' : ''} ${isLastInSuperset ? 'rounded-b-full mb-2' : ''}`} />
+                    )}
+                    <div className={`glass-card p-4 border-white/5 flex items-start gap-2 ${isInSuperset ? 'ml-3 border-primary/10' : ''}`}>
+                      {/* Verschieben-Buttons */}
+                      <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
+                        <button
+                          onClick={() => handleMoveExercise(i, 'up')}
+                          disabled={i === 0}
+                          className="p-1 hover:bg-white/10 rounded disabled:opacity-20"
+                        >
+                          <ArrowUp className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveExercise(i, 'down')}
+                          disabled={i === selectedPlan.plan_exercises.length - 1}
+                          className="p-1 hover:bg-white/10 rounded disabled:opacity-20"
+                        >
+                          <ArrowDown className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm">{ex.name}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {ex.target_duration_seconds
+                            ? `${ex.target_sets}×${ex.target_duration_seconds}s`
+                            : `${ex.target_sets}×${ex.target_reps}`}
+                          {ex.target_weight > 0 ? ` @ ${ex.target_weight}kg` : ''}
+                          {' · Pause '}
+                          {ex.rest_seconds}s
+                        </p>
+                        {isFirstInSuperset && (
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-primary mt-1 inline-block">Supersatz</span>
+                        )}
+                      </div>
+                      <div className="flex gap-0.5 shrink-0">
+                        {i < selectedPlan.plan_exercises.length - 1 && (
+                          <button
+                            onClick={() => handleToggleSuperset(i)}
+                            className={`p-1.5 hover:bg-white/10 rounded-lg ${supersetWithNext ? 'text-primary' : 'text-muted-foreground'}`}
+                            title="Supersatz mit nächster"
+                          >
+                            <Link2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button onClick={() => handleRemoveExercise(ex.id)} className="p-1.5 hover:bg-white/10 rounded-lg shrink-0">
+                          <X className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -411,6 +511,8 @@ export default function PlansPage() {
           </ul>
         )}
       </div>
+
+      <BottomNav />
     </div>
   );
 }

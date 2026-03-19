@@ -64,6 +64,10 @@ export interface Database {
           muscle_group: string | null;
           notes: string | null;
           is_favorite: boolean;
+          exercise_type: 'reps' | 'time';
+          target_muscles: string | null;
+          instructions: string | null;
+          common_mistakes: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -75,6 +79,10 @@ export interface Database {
           muscle_group?: string | null;
           notes?: string | null;
           is_favorite?: boolean;
+          exercise_type?: 'reps' | 'time';
+          target_muscles?: string | null;
+          instructions?: string | null;
+          common_mistakes?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -84,6 +92,10 @@ export interface Database {
           muscle_group?: string | null;
           notes?: string | null;
           is_favorite?: boolean;
+          exercise_type?: 'reps' | 'time';
+          target_muscles?: string | null;
+          instructions?: string | null;
+          common_mistakes?: string | null;
           updated_at?: string;
         };
       };
@@ -101,6 +113,8 @@ export interface Database {
           progression_threshold: number;
           sort_order: number;
           notes: string | null;
+          target_duration_seconds: number | null;
+          superset_group: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -117,6 +131,8 @@ export interface Database {
           progression_threshold?: number;
           sort_order?: number;
           notes?: string | null;
+          target_duration_seconds?: number | null;
+          superset_group?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -131,6 +147,8 @@ export interface Database {
           progression_threshold?: number;
           sort_order?: number;
           notes?: string | null;
+          target_duration_seconds?: number | null;
+          superset_group?: number | null;
           updated_at?: string;
         };
       };

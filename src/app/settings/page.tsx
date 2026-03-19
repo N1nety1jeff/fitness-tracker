@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
+import BottomNav from '@/components/bottom-nav';
 
 const USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -22,6 +23,22 @@ export default function SettingsPage() {
   const router = useRouter();
   const [sets, setSets] = useState<SetRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showDescriptions, setShowDescriptions] = useState(true);
+  const [showTips, setShowTips] = useState(true);
+
+  // Einstellungen aus localStorage laden
+  useEffect(() => {
+    const desc = localStorage.getItem('showDescriptions');
+    const tips = localStorage.getItem('showTips');
+    if (desc !== null) setShowDescriptions(desc === 'true');
+    if (tips !== null) setShowTips(tips === 'true');
+  }, []);
+
+  const toggleSetting = (key: string, value: boolean, setter: (v: boolean) => void) => {
+    const newVal = !value;
+    setter(newVal);
+    localStorage.setItem(key, String(newVal));
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -96,7 +113,40 @@ export default function SettingsPage() {
         </button>
       </header>
 
+      {/* Einstellungen */}
+      <div className="px-4 pt-4 pb-2">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Einstellungen</h2>
+        <div className="space-y-2">
+          <button
+            onClick={() => toggleSetting('showDescriptions', showDescriptions, setShowDescriptions)}
+            className="w-full glass-card p-4 border-white/5 flex items-center justify-between"
+          >
+            <div>
+              <p className="text-sm font-bold text-left">Übungsbeschreibungen</p>
+              <p className="text-[10px] text-muted-foreground text-left">Zielmuskeln und Ausführung anzeigen</p>
+            </div>
+            <div className={`w-11 h-6 rounded-full transition-colors relative ${showDescriptions ? 'bg-primary' : 'bg-white/10'}`}>
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${showDescriptions ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </div>
+          </button>
+          <button
+            onClick={() => toggleSetting('showTips', showTips, setShowTips)}
+            className="w-full glass-card p-4 border-white/5 flex items-center justify-between"
+          >
+            <div>
+              <p className="text-sm font-bold text-left">Ausführungstipps</p>
+              <p className="text-[10px] text-muted-foreground text-left">Häufige Fehler im Workout anzeigen</p>
+            </div>
+            <div className={`w-11 h-6 rounded-full transition-colors relative ${showTips ? 'bg-primary' : 'bg-white/10'}`}>
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${showTips ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Daten */}
       <div className="px-4 pt-3">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Trainingsdaten</h2>
         <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-3">
           {sets.length} geloggte Sätze · neueste zuerst
         </p>
@@ -146,23 +196,7 @@ export default function SettingsPage() {
         )}
       </div>
 
-      {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent pt-10">
-        <div className="glass-card flex justify-around p-4 border-white/10 shadow-2xl max-w-md mx-auto">
-          <button onClick={() => router.push('/dashboard')} className="flex flex-col items-center gap-1 text-muted-foreground">
-            <span className="text-xl">📊</span>
-            <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
-          </button>
-          <button onClick={() => router.push('/plans')} className="flex flex-col items-center gap-1 text-muted-foreground">
-            <span className="text-xl">📋</span>
-            <span className="text-[10px] font-black uppercase tracking-widest">Pläne</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-primary">
-            <span className="text-xl">⚙️</span>
-            <span className="text-[10px] font-black uppercase tracking-widest">Daten</span>
-          </button>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

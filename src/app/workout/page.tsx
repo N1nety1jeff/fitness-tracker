@@ -8,17 +8,19 @@ import {
   Pause,
   RotateCcw,
   CheckCircle2,
-  Clock,
   History,
   Plus,
   Minus,
   MessageSquare,
   List,
+  Timer,
+  Link2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTimer } from '@/hooks/use-timer';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { logSet, completeWorkout } from '@/lib/services/workout.service';
+import BottomNav from '@/components/bottom-nav';
 
 function formatDuration(startIso: string): string {
   const diff = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
@@ -57,6 +59,27 @@ export default function WorkoutPage() {
   const [showOverview, setShowOverview] = useState(false);
   const overviewRef = useRef<HTMLDivElement>(null);
 
+  // Zeitbasierte Übung: Countdown
+  const [exerciseTimeLeft, setExerciseTimeLeft] = useState(0);
+  const [exerciseTimerRunning, setExerciseTimerRunning] = useState(false);
+  const exerciseTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const isTimeBased = currentExercise?.target_duration_seconds != null && currentExercise.target_duration_seconds > 0;
+
+  // Supersatz-Erkennung
+  const getSupersatPartners = (index: number): number[] => {
+    const ex = exercises[index];
+    if (!ex?.superset_group) return [index];
+    const partners: number[] = [];
+    for (let i = 0; i < exercises.length; i++) {
+      if (exercises[i].superset_group === ex.superset_group) partners.push(i);
+    }
+    return partners;
+  };
+
+  const supersatIndices = currentExercise ? getSupersatPartners(currentExerciseIndex) : [];
+  const isInSuperset = supersatIndices.length > 1;
+
   const timer = useTimer({
     restDuration: currentExercise?.rest_seconds ?? 90,
   });
@@ -78,9 +101,32 @@ export default function WorkoutPage() {
       setReps(currentExercise.target_reps);
       setNotes('');
       timer.reset();
+      // Exercise timer reset
+      setExerciseTimerRunning(false);
+      if (exerciseTimerRef.current) clearInterval(exerciseTimerRef.current);
+      setExerciseTimeLeft(currentExercise.target_duration_seconds || 0);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentExerciseIndex]);
+
+  // Exercise countdown timer
+  useEffect(() => {
+    if (!exerciseTimerRunning || exerciseTimeLeft <= 0) {
+      if (exerciseTimerRef.current) clearInterval(exerciseTimerRef.current);
+      if (exerciseTimerRunning && exerciseTimeLeft <= 0) setExerciseTimerRunning(false);
+      return;
+    }
+    exerciseTimerRef.current = setInterval(() => {
+      setExerciseTimeLeft((t: number) => {
+        if (t <= 1) {
+          setExerciseTimerRunning(false);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => { if (exerciseTimerRef.current) clearInterval(exerciseTimerRef.current); };
+  }, [exerciseTimerRunning, exerciseTimeLeft]);
 
   // Übersicht schließen wenn außerhalb geklickt
   useEffect(() => {
@@ -118,13 +164,26 @@ export default function WorkoutPage() {
           completed_at: loggedSet.completed_at || new Date().toISOString(),
           created_at: loggedSet.created_at || new Date().toISOString(),
           weight,
-          reps,
+          reps: isTimeBased ? 0 : reps,
           rpe: null,
           notes: notes || null,
         });
+        setNotes('');
+
+        // Supersatz-Flow: zur nächsten Übung im Supersatz springen, Pause erst nach letzter
+        if (isInSuperset) {
+          const myPosInSuperset = supersatIndices.indexOf(currentExerciseIndex);
+          const nextInSuperset = supersatIndices[myPosInSuperset + 1];
+          if (nextInSuperset !== undefined) {
+            // Nächste Übung im Supersatz, kein Pause-Timer
+            setCurrentExercise(nextInSuperset);
+            return;
+          }
+          // Letzte im Supersatz: zurück zur ersten, Pause starten
+          setCurrentExercise(supersatIndices[0]);
+        }
         timer.reset();
         timer.start();
-        setNotes('');
       }
     } catch (error) {
       console.error('Fehler beim Speichern des Satzes:', error);
@@ -203,16 +262,25 @@ export default function WorkoutPage() {
               const done = ex.completedSets.length;
               const total = ex.target_sets;
               const isCurrentEx = i === currentExerciseIndex;
+              const prevEx = i > 0 ? exercises[i - 1] : null;
+              const nextEx = i < exercises.length - 1 ? exercises[i + 1] : null;
+              const inSS = ex.superset_group !== null;
+              const ssStart = inSS && (!prevEx || prevEx.superset_group !== ex.superset_group);
+              const ssEnd = inSS && (!nextEx || nextEx.superset_group !== ex.superset_group);
               return (
-                <li key={ex.id}>
+                <li key={ex.id} className="relative">
+                  {inSS && <div className={`absolute left-0 top-0 bottom-0 w-0.5 bg-purple-500/50 ${ssStart ? 'rounded-t-full mt-1' : ''} ${ssEnd ? 'rounded-b-full mb-1' : ''}`} />}
                   <button
                     onClick={() => { setCurrentExercise(i); setShowOverview(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${inSS ? 'pl-5' : ''} ${
                       isCurrentEx ? 'bg-primary/10' : 'hover:bg-white/5'
                     }`}
                   >
                     <span className={`text-xs font-mono w-4 ${isCurrentEx ? 'text-primary' : 'text-muted-foreground'}`}>{i + 1}</span>
                     <span className="flex-1 text-sm font-bold truncate">{ex.name}</span>
+                    {ex.target_duration_seconds ? (
+                      <span className="text-[9px] font-mono text-blue-400 shrink-0 mr-1">{ex.target_duration_seconds}s</span>
+                    ) : null}
                     <span className={`text-xs font-mono shrink-0 ${done >= total ? 'text-primary' : 'text-muted-foreground'}`}>
                       {done}/{total}
                     </span>
@@ -243,10 +311,21 @@ export default function WorkoutPage() {
             <ChevronRight className="w-5 h-5 text-white" />
           </button>
         </div>
-        <div className="flex justify-center gap-4 text-sm">
+        <div className="flex justify-center gap-2 text-sm flex-wrap">
           <span className="bg-primary/10 text-primary px-4 py-1.5 rounded-full font-bold border border-primary/20 text-xs tracking-wide">
-            Ziel: {currentExercise.target_sets}×{currentExercise.target_reps} @ {currentExercise.target_weight}kg
+            Ziel: {currentExercise.target_sets}×{isTimeBased ? `${currentExercise.target_duration_seconds}s` : currentExercise.target_reps}
+            {currentExercise.target_weight > 0 ? ` @ ${currentExercise.target_weight}kg` : ''}
           </span>
+          {isTimeBased && (
+            <span className="bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded-full font-bold border border-blue-500/20 text-xs tracking-wide flex items-center gap-1">
+              <Timer className="w-3 h-3" /> Zeitbasiert
+            </span>
+          )}
+          {isInSuperset && (
+            <span className="bg-purple-500/10 text-purple-400 px-3 py-1.5 rounded-full font-bold border border-purple-500/20 text-xs tracking-wide flex items-center gap-1">
+              <Link2 className="w-3 h-3" /> Supersatz
+            </span>
+          )}
         </div>
       </section>
 
@@ -292,33 +371,68 @@ export default function WorkoutPage() {
           </div>
         </div>
 
-        {/* Gewicht */}
-        <div className="glass-card p-5 flex items-center justify-between border-white/5">
-          <button onClick={() => setWeight(w => Math.max(0, w - 2.5))} className="gym-button bg-muted text-white">
-            <Minus className="w-7 h-7" />
-          </button>
-          <div className="text-center">
-            <span className="text-5xl font-black tracking-tighter">{weight}</span>
-            <span className="text-muted-foreground ml-1 font-bold text-lg">kg</span>
+        {/* Gewicht (nur wenn > 0 oder rep-basiert) */}
+        {(currentExercise.target_weight > 0 || !isTimeBased) && (
+          <div className="glass-card p-5 flex items-center justify-between border-white/5">
+            <button onClick={() => setWeight((w: number) => Math.max(0, w - 2.5))} className="gym-button bg-muted text-white">
+              <Minus className="w-7 h-7" />
+            </button>
+            <div className="text-center">
+              <span className="text-5xl font-black tracking-tighter">{weight}</span>
+              <span className="text-muted-foreground ml-1 font-bold text-lg">kg</span>
+            </div>
+            <button onClick={() => setWeight((w: number) => w + 2.5)} className="gym-button bg-muted text-white">
+              <Plus className="w-7 h-7" />
+            </button>
           </div>
-          <button onClick={() => setWeight(w => w + 2.5)} className="gym-button bg-muted text-white">
-            <Plus className="w-7 h-7" />
-          </button>
-        </div>
+        )}
 
-        {/* Reps */}
-        <div className="glass-card p-5 flex items-center justify-between border-white/5">
-          <button onClick={() => setReps(r => Math.max(0, r - 1))} className="gym-button bg-muted text-white">
-            <Minus className="w-7 h-7" />
-          </button>
-          <div className="text-center">
-            <span className="text-5xl font-black tracking-tighter">{reps}</span>
-            <span className="text-muted-foreground ml-1 font-bold text-lg">Reps</span>
+        {isTimeBased ? (
+          /* Zeitbasiert: Countdown */
+          <div className="glass-card p-5 border-white/5">
+            <div className="text-center">
+              <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mb-2">Übungstimer</div>
+              <div className={`text-6xl font-mono font-black mb-4 ${exerciseTimeLeft === 0 && exerciseTimerRunning === false && currentExercise.target_duration_seconds ? 'text-primary' : exerciseTimerRunning ? 'text-blue-400' : 'text-white'}`}>
+                {Math.floor(exerciseTimeLeft / 60)}:{(exerciseTimeLeft % 60).toString().padStart(2, '0')}
+              </div>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => {
+                    if (exerciseTimerRunning) {
+                      setExerciseTimerRunning(false);
+                    } else {
+                      if (exerciseTimeLeft === 0) setExerciseTimeLeft(currentExercise.target_duration_seconds || 60);
+                      setExerciseTimerRunning(true);
+                    }
+                  }}
+                  className={`px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-widest ${exerciseTimerRunning ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}`}
+                >
+                  {exerciseTimerRunning ? 'Stop' : exerciseTimeLeft === 0 ? 'Neustart' : 'Start'}
+                </button>
+                <button
+                  onClick={() => { setExerciseTimerRunning(false); setExerciseTimeLeft(currentExercise.target_duration_seconds || 60); }}
+                  className="px-4 py-3 rounded-xl bg-white/5 text-muted-foreground"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           </div>
-          <button onClick={() => setReps(r => Math.min(50, r + 1))} className="gym-button bg-muted text-white">
-            <Plus className="w-7 h-7" />
-          </button>
-        </div>
+        ) : (
+          /* Rep-basiert */
+          <div className="glass-card p-5 flex items-center justify-between border-white/5">
+            <button onClick={() => setReps((r: number) => Math.max(0, r - 1))} className="gym-button bg-muted text-white">
+              <Minus className="w-7 h-7" />
+            </button>
+            <div className="text-center">
+              <span className="text-5xl font-black tracking-tighter">{reps}</span>
+              <span className="text-muted-foreground ml-1 font-bold text-lg">Reps</span>
+            </div>
+            <button onClick={() => setReps((r: number) => Math.min(50, r + 1))} className="gym-button bg-muted text-white">
+              <Plus className="w-7 h-7" />
+            </button>
+          </div>
+        )}
 
         {/* Notizen */}
         <div className="glass-card p-5 border-white/5">
@@ -346,27 +460,7 @@ export default function WorkoutPage() {
         </button>
       </section>
 
-      {/* Navigation Footer */}
-      <nav className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black to-transparent pt-10">
-        <div className="glass-card flex justify-around p-4 border-white/10 shadow-2xl">
-          <button onClick={() => router.push('/dashboard')} className="flex flex-col items-center gap-1 text-muted-foreground">
-            <History className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-primary">
-            <Play className="w-6 h-6 fill-current" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Training</span>
-          </button>
-          <button onClick={() => router.push('/plans')} className="flex flex-col items-center gap-1 text-muted-foreground">
-            <List className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Pläne</span>
-          </button>
-          <button onClick={() => router.push('/settings')} className="flex flex-col items-center gap-1 text-muted-foreground">
-            <Clock className="w-6 h-6" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Daten</span>
-          </button>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

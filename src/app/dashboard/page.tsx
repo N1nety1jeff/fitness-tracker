@@ -12,7 +12,9 @@ import {
   Plus
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getActivePlan, createPlan, addExerciseToPlan } from '@/lib/services/plan.service';
+import { createWorkout } from '@/lib/services/workout.service';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { PlanWithExercises } from '@/lib/services/plan.service';
 
@@ -36,9 +38,11 @@ const MOCK_CHART_DATA = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [activePlan, setActivePlan] = React.useState<PlanWithExercises | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
-  const { startWorkout, isActive: isWorkoutActive } = useWorkoutStore();
+  const [isStarting, setIsStarting] = React.useState(false);
+  const { startWorkout } = useWorkoutStore();
 
   // Daten vom Supabase laden
   const loadData = React.useCallback(async () => {
@@ -191,18 +195,27 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <Link 
-              href="/workout" 
-              onClick={() => startWorkout(
-                { id: 'w-new', plan_id: activePlan.id, user_id: activePlan.user_id, workout_number: 1, started_at: new Date().toISOString(), completed_at: null, notes: null, created_at: new Date().toISOString() },
-                activePlan.plan_exercises,
-                []
-              )}
-              className="w-full gym-button bg-primary text-black electric-glow flex items-center justify-center gap-3 py-4"
+            <button
+              disabled={isStarting}
+              onClick={async () => {
+                if (!activePlan) return;
+                setIsStarting(true);
+                const { workout } = await createWorkout(activePlan.id, '00000000-0000-0000-0000-000000000000');
+                if (workout) {
+                  startWorkout(workout, activePlan.plan_exercises, []);
+                  router.push('/workout');
+                } else {
+                  setIsStarting(false);
+                  alert('Training konnte nicht gestartet werden.');
+                }
+              }}
+              className="w-full gym-button bg-primary text-black electric-glow flex items-center justify-center gap-3 py-4 disabled:opacity-50"
             >
               <Play className="w-5 h-5 fill-current" />
-              <span className="font-black uppercase tracking-tight text-sm">Training Starten</span>
-            </Link>
+              <span className="font-black uppercase tracking-tight text-sm">
+                {isStarting ? 'Starte...' : 'Training Starten'}
+              </span>
+            </button>
           </div>
         ) : (
           <div className="glass-card p-8 border-dashed border-white/10 flex flex-col items-center justify-center text-center">

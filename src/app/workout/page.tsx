@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useTimer } from '@/hooks/use-timer';
 import { useWorkoutStore } from '@/stores/workout-store';
+import { logSet } from '@/lib/services/workout.service';
 
 // ---- Mock Data ----
 
@@ -42,7 +43,8 @@ export default function WorkoutPage() {
     previousExercise,
     addSet,
     isActive,
-    startWorkout
+    startWorkout,
+    workout
   } = useWorkoutStore();
 
   // Aktuelle Übung aus dem Store
@@ -86,30 +88,47 @@ export default function WorkoutPage() {
     }
   }, [currentExerciseIndex, currentExercise]);
 
-  const handleLogSet = () => {
-    if (!currentExercise) return;
+  const handleLogSet = async () => {
+    if (!workout || !currentExercise) return;
 
-    const newSet = {
-      id: Math.random().toString(36).substr(2, 9),
-      workout_id: 'w1',
-      plan_exercise_id: currentExercise.id,
-      set_number: currentExercise.completedSets.length + 1,
-      weight,
-      reps,
-      rpe,
-      notes: notes || null,
-      completed_at: new Date().toISOString(),
-      created_at: new Date().toISOString()
-    };
+    try {
+      // 1. In Supabase speichern
+      const loggedSet = await logSet({
+        workoutId: workout.id,
+        planExerciseId: currentExercise.id,
+        setNumber: currentExercise.completedSets.length + 1,
+        weight,
+        reps,
+        rpe,
+        notes: notes || null,
+      });
 
-    addSet(currentExercise.id, newSet);
-    
-    // UI Reset für den nächsten Satz (optional, Notizen behalten falls gewünscht)
-    setNotes('');
-    
-    // Timer starten
-    timer.reset();
-    timer.start();
+      if (loggedSet) {
+        // 2. Im Zustand (store) speichern
+        addSet(currentExercise.id, {
+          id: loggedSet.id,
+          workout_id: workout.id,
+          plan_exercise_id: currentExercise.id,
+          set_number: loggedSet.set_number,
+          completed_at: loggedSet.completed_at || new Date().toISOString(),
+          created_at: loggedSet.created_at || new Date().toISOString(),
+          weight,
+          reps,
+          rpe,
+          notes: notes || null,
+        });
+        
+        // Timer starten
+        timer.reset();
+        timer.start();
+        
+        // UI Reset für den nächsten Satz (Notizen leeren)
+        setNotes('');
+      }
+    } catch (error) {
+      console.error('Fehler beim Speichern des Satzes:', error);
+      alert('Satz konnte nicht gespeichert werden!');
+    }
   };
 
   if (!currentExercise) return <div className="p-8 text-center">Lade Training...</div>;
